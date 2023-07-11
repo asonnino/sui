@@ -1093,7 +1093,16 @@ impl AuthorityState {
         let output_keys: Vec<_> = inner_temporary_store
             .written
             .iter()
-            .map(|(_, ((id, seq, _), obj, _))| InputKey(*id, (!obj.is_package()).then_some(*seq)))
+            .map(|(_, ((id, seq, _), obj, _))| {
+                if obj.is_package() {
+                    InputKey::Package { id: *id }
+                } else {
+                    InputKey::VersionedObject {
+                        id: *id,
+                        version: *seq,
+                    }
+                }
+            })
             .collect();
 
         self.commit_certificate(inner_temporary_store, certificate, effects, epoch_store)
@@ -1754,7 +1763,7 @@ impl AuthorityState {
                     tx_coins,
                     written,
                     &module_resolver,
-                    &inner_temporary_store.loaded_child_objects,
+                    &inner_temporary_store.loaded_runtime_objects,
                 )
                 .await
                 .tap_ok(|_| self.metrics.post_processing_total_tx_indexed.inc())
@@ -4300,7 +4309,7 @@ impl NodeStateDump {
         // Record all loaded child objects
         // Child objects which are read but not mutated are not tracked anywhere else
         let mut loaded_child_objects = Vec::new();
-        for (id, ver) in &inner_temporary_store.loaded_child_objects {
+        for (id, ver) in &inner_temporary_store.loaded_runtime_objects {
             if let Some(w) = authority_store.get_object_by_key(id, *ver)? {
                 loaded_child_objects.push(w)
             }

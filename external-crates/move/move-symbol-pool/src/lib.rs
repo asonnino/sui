@@ -69,6 +69,8 @@ static_symbols!(
     "tx_context",
     "TxContext",
     "ID",
+    "transfer",
+    "Receiving",
 );
 
 /// The global, unique cache of strings.
