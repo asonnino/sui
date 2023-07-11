@@ -28,6 +28,8 @@ pub const UID_TYPE_NAME: Symbol = symbol!("UID");
 pub const ID_TYPE_NAME: Symbol = symbol!("ID");
 pub const TX_CONTEXT_MODULE_NAME: Symbol = symbol!("tx_context");
 pub const TX_CONTEXT_TYPE_NAME: Symbol = symbol!("TxContext");
+pub const TRANSFER_MODULE_NAME: Symbol = symbol!("transfer");
+pub const RECEIVING_TYPE_NAME: Symbol = symbol!("Receiving");
 
 pub const SUI_SYSTEM_ADDR_NAME: Symbol = symbol!("sui_system");
 pub const SUI_SYSTEM_MODULE_NAME: Symbol = symbol!("sui_system");

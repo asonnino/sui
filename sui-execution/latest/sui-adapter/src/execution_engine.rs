@@ -113,6 +113,9 @@ mod checked {
         );
 
         let is_epoch_change = matches!(transaction_kind, TransactionKind::ChangeEpoch(_));
+        let receiving_objects = transaction_kind
+            .receiving_objects()
+            .expect("checked in transaction input checking");
 
         let deny_cert = is_certificate_denied(&transaction_digest, certificate_deny_set);
         let (gas_cost_summary, execution_result) = execute_transaction::<Mode>(
@@ -192,7 +195,8 @@ mod checked {
         let (inner, effects) = temporary_store.to_effects(
             shared_object_refs,
             &transaction_digest,
-            transaction_dependencies.into_iter().collect(),
+            transaction_dependencies,
+            receiving_objects,
             gas_cost_summary,
             status,
             gas_charger,

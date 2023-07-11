@@ -193,6 +193,7 @@ mod checked {
             shared_object_refs,
             &transaction_digest,
             transaction_dependencies.into_iter().collect(),
+            vec![], // no receiving objects in v0
             gas_cost_summary,
             status,
             gas_charger,
