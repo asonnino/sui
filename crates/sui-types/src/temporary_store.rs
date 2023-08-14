@@ -329,7 +329,7 @@ impl<'backing> TemporaryStore<'backing> {
     /// For every object from active_inputs (i.e. all mutable objects), if they are not
     /// mutated during the transaction execution, force mutating them by incrementing the
     /// sequence number. This is required to achieve safety.
-    fn ensure_active_inputs_mutated(&mut self) {
+    pub fn ensure_active_inputs_mutated(&mut self) {
         let mut to_be_updated = vec![];
         for (id, _seq, _) in &self.mutable_input_refs {
             if !self.written.contains_key(id) && !self.deleted.contains_key(id) {
@@ -805,19 +805,6 @@ impl<'backing> TemporaryStore<'backing> {
         }
     }
 
-    pub(crate) fn ensure_gas_and_input_mutated(&mut self, gas_charger: &mut GasCharger) {
-        if let Some(gas_object_id) = gas_charger.gas_coin() {
-            let gas_object = self
-                .read_object(&gas_object_id)
-                .expect("We constructed the object map so it should always have the gas object id")
-                .clone();
-            self.written
-                .entry(gas_object_id)
-                .or_insert_with(|| (gas_object, WriteKind::Mutate));
-        }
-        self.ensure_active_inputs_mutated();
-    }
-
     /// Track storage gas for each mutable input object (including the gas coin)
     /// and each created object. Compute storage refunds for each deleted object.
     /// Will *not* charge anything, gas status keeps track of storage cost and rebate.
@@ -825,7 +812,6 @@ impl<'backing> TemporaryStore<'backing> {
     /// `SuiGasStatus` `storage_rebate` and `storage_gas_units` track the transaction
     /// overall storage rebate and cost.
     pub(crate) fn collect_storage_and_rebate(&mut self, gas_charger: &mut GasCharger) {
-        let mut objects_to_update = vec![];
         for (object_id, (object, write_kind)) in &mut self.written {
             // get the object storage_rebate in input for mutated objects
             let old_storage_rebate = match write_kind {
@@ -853,18 +839,9 @@ impl<'backing> TemporaryStore<'backing> {
             let new_storage_rebate =
                 gas_charger.track_storage_mutation(new_object_size, old_storage_rebate);
             object.storage_rebate = new_storage_rebate;
-            if !object.is_immutable() {
-                objects_to_update.push((object.clone(), *write_kind));
-            }
         }
 
         self.collect_rebate(gas_charger);
-
-        // Write all objects at the end only if all previous gas charges succeeded.
-        // This avoids polluting the temporary store state if this function failed.
-        for (object, write_kind) in objects_to_update {
-            self.write_object(object, write_kind);
-        }
     }
 
     pub(crate) fn collect_rebate(&self, gas_charger: &mut GasCharger) {
@@ -987,17 +964,13 @@ impl<'backing> TemporaryStore<'backing> {
         let mut total_input_sui = 0;
         // total amount of SUI in output objects, including both coins and storage rebates
         let mut total_output_sui = 0;
-        // total amount of SUI in storage rebate of input objects
-        let mut total_input_rebate = 0;
-        // total amount of SUI in storage rebate of output objects
-        let mut total_output_rebate = 0;
         for (id, (output_obj, kind)) in &self.written {
             match kind {
                 WriteKind::Mutate => {
                     // note: output_obj.version has not yet been increased by the tx, so output_obj.version
                     // is the object version at tx input
                     let input_version = output_obj.version();
-                    let (input_sui, input_storage_rebate) = self.get_input_sui(
+                    let (input_sui, _) = self.get_input_sui(
                         id,
                         input_version,
                         layout_resolver,
@@ -1014,8 +987,6 @@ impl<'backing> TemporaryStore<'backing> {
                                 )
                             })?;
                     }
-                    total_input_rebate += input_storage_rebate;
-                    total_output_rebate += output_obj.storage_rebate;
                 }
                 WriteKind::Create => {
                     // created objects did not exist at input, and thus contribute 0 to input SUI
@@ -1029,7 +1000,6 @@ impl<'backing> TemporaryStore<'backing> {
                                 )
                             })?;
                     }
-                    total_output_rebate += output_obj.storage_rebate;
                 }
                 WriteKind::Unwrap => {
                     // an unwrapped object was either:
@@ -1046,33 +1016,30 @@ impl<'backing> TemporaryStore<'backing> {
                                 )
                             })?;
                     }
-                    total_output_rebate += output_obj.storage_rebate;
                 }
             }
         }
         for (id, kind) in &self.deleted {
             match kind {
                 DeleteKindWithOldVersion::Normal(input_version) => {
-                    let (input_sui, input_storage_rebate) = self.get_input_sui(
+                    let (input_sui, _) = self.get_input_sui(
                         id,
                         *input_version,
                         layout_resolver,
                         do_expensive_checks,
                     )?;
                     total_input_sui += input_sui;
-                    total_input_rebate += input_storage_rebate;
                 }
                 DeleteKindWithOldVersion::Wrap(input_version) => {
                     // wrapped object was a tx input or dynamic field--need to account for it in input SUI
                     // note: if an object is created by the tx, then wrapped, it will not appear here
-                    let (input_sui, input_storage_rebate) = self.get_input_sui(
+                    let (input_sui, _) = self.get_input_sui(
                         id,
                         *input_version,
                         layout_resolver,
                         do_expensive_checks,
                     )?;
                     total_input_sui += input_sui;
-                    total_input_rebate += input_storage_rebate;
                     // else, the wrapped object was either:
                     // 1. freshly created, which means it has 0 contribution to input SUI
                     // 2. unwrapped from another object A, which means its contribution to input SUI will be captured by looking at A
@@ -1102,28 +1069,6 @@ impl<'backing> TemporaryStore<'backing> {
                 total_output_sui))
             );
             }
-        }
-
-        // all SUI in storage rebate fields of input objects should flow either to the transaction storage rebate, or the non-refundable
-        // storage rebate pool
-        if total_input_rebate != gas_summary.storage_rebate + gas_summary.non_refundable_storage_fee
-        {
-            // TODO: re-enable once we fix the edge case with OOG, gas smashing, and storage rebate
-            /*return Err(ExecutionError::invariant_violation(
-                format!("SUI conservation failed--{} SUI in storage rebate field of input objects, {} SUI in tx storage rebate or tx non-refundable storage rebate",
-                total_input_rebate,
-                gas_summary.non_refundable_storage_fee))
-            );*/
-        }
-
-        // all SUI charged for storage should flow into the storage rebate field of some output object
-        if gas_summary.storage_cost != total_output_rebate {
-            // TODO: re-enable once we fix the edge case with OOG, gas smashing, and storage rebate
-            /*return Err(ExecutionError::invariant_violation(
-                format!("SUI conservation failed--{} SUI charged for storage, {} SUI in storage rebate field of output objects",
-                gas_summary.storage_cost,
-                total_output_rebate))
-            );*/
         }
         Ok(())
     }
