@@ -2077,6 +2077,18 @@ impl AuthorityState {
             .enqueue_certificates(certs, epoch_store)
     }
 
+    // NB: This must only be called at time of reconfiguration.
+    fn clear_object_per_epoch_marker_table(&self) -> SuiResult<()> {
+        // We can safely delete all entries in the per epoch marker table since this is only called
+        // at epoch boundaries (during reconfiguration). Therefore any entries that currently
+        // exist can be removed. Because of this we can use the `delete_all` method.
+        Ok(self
+            .database
+            .perpetual_tables
+            .object_per_epoch_marker_table
+            .delete_all()?)
+    }
+
     fn create_owner_index_if_empty(
         &self,
         genesis_objects: &[Object],
@@ -2150,6 +2162,7 @@ impl AuthorityState {
                 .epoch_start_state()
                 .protocol_version(),
         );
+        self.clear_object_per_epoch_marker_table()?;
         self.db()
             .set_epoch_start_configuration(&epoch_start_configuration)
             .await?;
