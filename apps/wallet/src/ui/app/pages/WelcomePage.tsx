@@ -20,6 +20,7 @@ export function WelcomePage() {
 	const isInitializedLoading = useInitializedGuard(false);
 	const createAccountsMutation = useCreateAccountsMutation();
 	const [createInProgressProvider, setCreateInProgressProvider] = useState<ZkProvider | null>(null);
+	const buttonsDisabled = createAccountsMutation.isLoading || createAccountsMutation.isSuccess;
 	return (
 		<PageLayout forceFullscreen>
 			<Loading loading={isInitializedLoading}>
@@ -64,7 +65,7 @@ export function WelcomePage() {
 											});
 										setCreateInProgressProvider(null);
 									}}
-									disabled={createAccountsMutation.isLoading}
+									disabled={buttonsDisabled}
 									loading={createInProgressProvider === 'Google'}
 								/>
 							</div>
@@ -116,7 +117,7 @@ export function WelcomePage() {
 							size="tall"
 							variant="secondary"
 							text="More Options"
-							disabled
+							disabled={buttonsDisabled}
 						/>
 					</div>
 				</div>
