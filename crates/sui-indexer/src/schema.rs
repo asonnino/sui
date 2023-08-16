@@ -7,10 +7,10 @@ diesel::table! {
         sequence_number -> Int8,
         checkpoint_digest -> Bytea,
         epoch -> Int8,
+        tx_digests -> Array<Bytea>,
         network_total_transactions -> Int8,
-        previous_digest -> Bytea,
+        previous_checkpoint_digest -> Nullable<Bytea>,
         end_of_epoch -> Bool,
-        transactions -> Array<Nullable<Text>>,
         timestamp_ms -> Int8,
         total_gas_cost -> Int8,
         computation_cost -> Int8,
@@ -19,6 +19,7 @@ diesel::table! {
         non_refundable_storage_fee -> Int8,
         checkpoint_commitments -> Bytea,
         validator_signature -> Bytea,
+        successful_tx_num -> Int8,
     }
 }
 

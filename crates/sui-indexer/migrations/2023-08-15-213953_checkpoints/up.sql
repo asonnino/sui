@@ -4,9 +4,9 @@ CREATE TABLE checkpoints
     checkpoint_digest                   bytea        NOT NULL,
     epoch                               bigint       NOT NULL,
     network_total_transactions          bigint       NOT NULL,
-    previous_digest                     bytea        NOT NULL,
+    previous_checkpoint_digest          bytea,
     end_of_epoch                        boolean      NOT NULL,
-    transactions                        TEXT[]       NOT NULL,
+    tx_digetts                          bytea[]      NOT NULL,
     timestamp_ms                        BIGINT       NOT NULL,
     -- derived from GasCostSummary
     total_gas_cost                      BIGINT       NOT NULL,
@@ -16,6 +16,7 @@ CREATE TABLE checkpoints
     non_refundable_storage_fee          BIGINT       NOT NULL,
     checkpoint_commitments              bytea        NOT NULL,
     validator_signature                 bytea        NOT NULL
+    successful_tx_num                   bigint       NOT NULL,
 );
 
 CREATE INDEX checkpoints_epoch ON checkpoints (epoch);
